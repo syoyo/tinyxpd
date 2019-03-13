@@ -42,7 +42,7 @@ struct Xpd {
 
 // Based on XPD3 file format
 // https://knowledge.autodesk.com/support/maya/learn-explore/caas/CloudHelp/cloudhelp/2016/ENU/Maya/files/GUID-43899CB9-CE0F-476E-9E94-591AE2F1F807-htm.html
-struct XPD {
+struct XPDHeader {
   // See XpdFile.h in XGen SDK for details.
 
   unsigned char fileVersion;
@@ -64,7 +64,7 @@ struct XPD {
   std::vector<uint32_t> numPrims;
   std::vector<uint64_t> blockPosition;
 
-  XPD()
+  XPDHeader()
       : fileVersion(0),
         primType(Xpd::PrimType::Point),  // TODO(syoyo): Set invalid value
         primVersion(0),
@@ -76,16 +76,39 @@ struct XPD {
 };
 
 ///
-/// Parse XPD file from a file.
+/// Parse XPD header from a file.
+/// This API reads XPD file and stores whole content of read XPD file data to
+/// `binary`(i.e. data size equal to the XPD file size). This API is handy but
+/// consumes memory. If you want to handle larger XPD and/or multiple XPD file
+/// at once(e.g. 1GB or more), consider using ParseXPDHeaderFromMemory.
 ///
 /// @param[in] filename XPD filename.
-/// @param[out] xpd Parsed XPD data.
+/// @param[out] xpd_header Parsed XPD header.
+/// @param[out] binary Binary data of whole content of XPD file.
 /// @param[out] err Error string. Filled when failed to parse XPD file.
 ///
 /// Return false when failed to parse XPD file and report an error string to
 /// `err`
 ///
-bool ParseXPDFromFile(const std::string &filename, XPD *xpd, std::string *err);
+bool ParseXPDFromFile(const std::string &filename, XPDHeader *xpd_header,
+                      std::vector<uint8_t> *binary, std::string *err);
+
+///
+/// Parse XPD header from a memory(stream).
+/// This API does not create an internal copy of memory(`binary`), thus
+/// `binary`(XPD data) must not be free'ed until finising accessing XPD data
+/// using parsed XPDHeader.
+///
+/// @param[in] binary Pointer to XPD binary data.
+/// @param[in] binary_length Data length of XPD binary data.
+/// @param[out] xpd_header Parsed XPD header.
+/// @param[out] err Error string. Filled when failed to parse XPD file.
+///
+/// Return false when failed to parse XPD file and report an error string to
+/// `err`
+///
+bool ParseXPDHeaderFromMemory(const uint8_t *binary, const size_t binary_length,
+                              XPDHeader *xpd_header, std::string *err);
 
 }  // namespace tiny_xpd
 
@@ -94,7 +117,7 @@ bool ParseXPDFromFile(const std::string &filename, XPD *xpd, std::string *err);
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <iostream> // dbg
+#include <iostream>  // dbg
 
 namespace tiny_xpd {
 
@@ -111,8 +134,8 @@ class StreamReader {
     dst[1] = src[0];
   }
 
-  static inline void swap4(unsigned int *val) {
-    unsigned int tmp = *val;
+  static inline void swap4(uint32_t *val) {
+    uint32_t tmp = *val;
     uint8_t *dst = reinterpret_cast<uint8_t *>(val);
     uint8_t *src = reinterpret_cast<uint8_t *>(&tmp);
 
@@ -161,6 +184,26 @@ class StreamReader {
     dst[5] = src[2];
     dst[6] = src[1];
     dst[7] = src[0];
+  }
+
+  static void cpy4(int *dst_val, const int *src_val) {
+    unsigned char *dst = reinterpret_cast<unsigned char *>(dst_val);
+    const unsigned char *src = reinterpret_cast<const unsigned char *>(src_val);
+
+    dst[0] = src[0];
+    dst[1] = src[1];
+    dst[2] = src[2];
+    dst[3] = src[3];
+  }
+
+  static void cpy4(uint32_t *dst_val, const uint32_t *src_val) {
+    unsigned char *dst = reinterpret_cast<unsigned char *>(dst_val);
+    const unsigned char *src = reinterpret_cast<const unsigned char *>(src_val);
+
+    dst[0] = src[0];
+    dst[1] = src[1];
+    dst[2] = src[2];
+    dst[3] = src[3];
   }
 
  public:
@@ -252,6 +295,7 @@ class StreamReader {
     return true;
   }
 
+#if 0
   bool read2(unsigned short *ret) {
     if ((idx_ + 2) > length_) {
       return false;
@@ -269,14 +313,17 @@ class StreamReader {
 
     return true;
   }
+#endif
 
-  bool read4(unsigned int *ret) {
+  bool read4(uint32_t *ret) {
     if ((idx_ + 4) > length_) {
       return false;
     }
 
-    unsigned int val =
-        *(reinterpret_cast<const unsigned int *>(&binary_[idx_]));
+    // use cpy4 considering unaligned access.
+    const uint32_t *ptr = reinterpret_cast<const uint32_t *>(&binary_[idx_]);
+    uint32_t val;
+    cpy4(&val, ptr);
 
     if (swap_endian_) {
       swap4(&val);
@@ -293,7 +340,10 @@ class StreamReader {
       return false;
     }
 
-    int val = *(reinterpret_cast<const int *>(&binary_[idx_]));
+    // use cpy4 considering unaligned access.
+    const int32_t *ptr = reinterpret_cast<const int32_t *>(&binary_[idx_]);
+    int32_t val;
+    cpy4(&val, ptr);
 
     if (swap_endian_) {
       swap4(&val);
@@ -305,6 +355,7 @@ class StreamReader {
     return true;
   }
 
+#if 0
   bool read8(uint64_t *ret) {
     if ((idx_ + 8) > length_) {
       return false;
@@ -338,6 +389,7 @@ class StreamReader {
 
     return true;
   }
+#endif
 
   bool read_float(float *ret) {
     if (!ret) {
@@ -354,6 +406,7 @@ class StreamReader {
     return true;
   }
 
+#if 0
   bool read_double(double *ret) {
     if (!ret) {
       return false;
@@ -368,6 +421,7 @@ class StreamReader {
 
     return true;
   }
+#endif
 
   bool read_string(std::string *ret) {
     if (!ret) {
@@ -440,7 +494,7 @@ class StreamReader {
   uint64_t idx_;
 };
 
-static bool ParseXPDHeader(StreamReader *sr, XPD *xpd, std::string *err) {
+static bool ParseXPDHeader(StreamReader *sr, XPDHeader *xpd, std::string *err) {
   // Header: XPD3
   uint8_t magic[4];
   if (!sr->read(4, 4, magic)) {
@@ -517,7 +571,8 @@ static bool ParseXPDHeader(StreamReader *sr, XPD *xpd, std::string *err) {
   }
 
   // blockSize.
-  // Number of characters for all block names combined(including the end of strinc character for each block)
+  // Number of characters for all block names combined(including the end of
+  // strinc character for each block)
   {
     uint32_t blockSize(0);
     if (!sr->read4(&blockSize)) {
@@ -531,13 +586,12 @@ static bool ParseXPDHeader(StreamReader *sr, XPD *xpd, std::string *err) {
 
     std::vector<char> blockNames(blockSize);
 
-    if (!sr->read(blockSize, blockSize, reinterpret_cast<uint8_t *>(blockNames.data()))) {
-
+    if (!sr->read(blockSize, blockSize,
+                  reinterpret_cast<uint8_t *>(blockNames.data()))) {
       if (err) {
         (*err) += "Failed to read `blockNames'.";
       }
       return false;
-
     }
 
     // split names
@@ -547,7 +601,7 @@ static bool ParseXPDHeader(StreamReader *sr, XPD *xpd, std::string *err) {
         if (blockNames[i] == '\0') {
           std::string name(&blockNames[last_idx], &blockNames[i]);
           xpd->block.push_back(name);
-          std::cout << "name = " << name  << std::endl;
+          std::cout << "name = " << name << std::endl;
           last_idx = i + 1;
         }
       }
@@ -555,16 +609,15 @@ static bool ParseXPDHeader(StreamReader *sr, XPD *xpd, std::string *err) {
 
     // primSize
     for (size_t i = 0; i < xpd->block.size(); i++) {
-
       uint32_t primSize;
       if (!sr->read4(&primSize)) {
-
         if (err) {
           (*err) += "Failed to read `primSize'.";
         }
         return false;
-
       }
+
+      std::cout << "primSize = " << primSize << std::endl;
 
       if (primSize < 1) {
         // ???
@@ -572,84 +625,156 @@ static bool ParseXPDHeader(StreamReader *sr, XPD *xpd, std::string *err) {
           (*err) += "primSize value is zero.";
         }
         return false;
-
       }
 
       xpd->primSize.push_back(primSize);
 
       std::cout << "primSize[" << i << "] = " << primSize << std::endl;
-
     }
-
-
   }
 
   // numKeys
-  // Number of characters for all key names combined(including the end of strinc character for each key)
+  // Number of characters for all key names combined(including the end of strinc
+  // character for each key)
   {
+    uint32_t numKeys(0);
+    if (!sr->read4(&numKeys)) {
+      if (err) {
+        (*err) += "Failed to parse `numKeys`.";
+      }
+      return false;
+    }
+
     uint32_t keySize(0);
     if (!sr->read4(&keySize)) {
       if (err) {
-        (*err) += "Failed to parse `numKey`.";
+        (*err) += "Failed to parse `keySize`.";
       }
       return false;
     }
 
     std::cout << "keySize " << keySize << "\n";
 
-    if (keySize == 0) {
-      // ???
-      if (err) {
-        (*err) += "keySize is zero.";
+    // keySize may be 0.
+    if (keySize > 0) {
+      std::vector<char> keyNames(keySize);
+
+      if (!sr->read(keySize, keySize,
+                    reinterpret_cast<uint8_t *>(keyNames.data()))) {
+        if (err) {
+          (*err) += "Failed to read `keyNames'.";
+        }
+        return false;
       }
-      return false;
 
-    }
-
-    std::vector<char> keyNames(keySize);
-
-    if (!sr->read(keySize, keySize, reinterpret_cast<uint8_t *>(keyNames.data()))) {
-
-      if (err) {
-        (*err) += "Failed to read `keyNames'.";
-      }
-      return false;
-
-    }
-
-    // split names
-    {
-      size_t last_idx = 0;
-      for (size_t i = 0; i < keySize; i++) {
-        if (keyNames[i] == '\0') {
-          std::string name(&keyNames[last_idx], &keyNames[i]);
-          xpd->key.push_back(name);
-          std::cout << "name = " << name  << std::endl;
-          last_idx = i + 1;
+      // split names
+      {
+        size_t last_idx = 0;
+        for (size_t i = 0; i < keySize; i++) {
+          if (keyNames[i] == '\0') {
+            std::string name(&keyNames[last_idx], &keyNames[i]);
+            xpd->key.push_back(name);
+            std::cout << "name = " << name << std::endl;
+            last_idx = i + 1;
+          }
         }
       }
     }
   }
 
-  return true;
-}
-
-bool ParseXPDFromFile(const std::string &filename, XPD *xpd, std::string *err) {
-  std::ifstream ifs(filename, std::ios::in | std::ios::binary);
-  if (!ifs) {
+  // numFaces
+  if (!sr->read4(&xpd->numFaces)) {
     if (err) {
-      (*err) = "Failed to open a file";
+      (*err) += "Failed to parse `numFaces`.";
     }
     return false;
   }
 
-  // TODO(syoyo): Use mmap
+  if (xpd->numFaces < 1) {
+    if (err) {
+      (*err) += "numFaces is zero";
+    }
+    return false;
+  }
+
+  // faceid. length = numFaces.
+  xpd->faceid.resize(xpd->numFaces);
+
+  if (!sr->read(sizeof(int32_t) * xpd->numFaces,
+                sizeof(int32_t) * xpd->numFaces,
+                reinterpret_cast<uint8_t *>(xpd->faceid.data()))) {
+    if (err) {
+      (*err) += "Failed to parse `faceid`.";
+    }
+    return false;
+  }
+
+  // numPrims. length = numFaces.
+  xpd->numPrims.resize(xpd->numFaces);
+  if (!sr->read(sizeof(uint32_t) * xpd->numFaces,
+                sizeof(uint32_t) * xpd->numFaces,
+                reinterpret_cast<uint8_t *>(xpd->numPrims.data()))) {
+    if (err) {
+      (*err) += "Failed to parse `numPrims`.";
+    }
+    return false;
+  }
+
+  // blockPosition. length = numFaces * numBlocks.
+  xpd->blockPosition.resize(xpd->numFaces * xpd->numBlocks);
+  if (!sr->read(sizeof(uint64_t) * xpd->blockPosition.size(),
+                sizeof(uint64_t) * xpd->blockPosition.size(),
+                reinterpret_cast<uint8_t *>(xpd->blockPosition.data()))) {
+    if (err) {
+      (*err) += "Failed to parse `blockPosition`.";
+    }
+    return false;
+  }
+
+  return true;
+}
+
+bool ParseXPDFromFile(const std::string &filename, XPDHeader *xpd_header,
+                      std::vector<uint8_t> *binary, std::string *err) {
+  if (filename.empty()) {
+    if (err) {
+      (*err) = "`filename` is empty.\n";
+    }
+
+    return false;
+  }
+
+  if (!xpd_header) {
+    if (err) {
+      (*err) = "`xpd_header` argument is null.\n";
+    }
+
+    return false;
+  }
+
+  if (!binary) {
+    if (err) {
+      (*err) = "`binary` argument is null.\n";
+    }
+
+    return false;
+  }
+
+  std::ifstream ifs(filename, std::ios::in | std::ios::binary);
+  if (!ifs) {
+    if (err) {
+      (*err) = "Failed to open a file.\n";
+    }
+    return false;
+  }
+
+  // Read whole content of XPD file.
   ifs.seekg(0, ifs.end);
   size_t sz = static_cast<size_t>(ifs.tellg());
   if (int64_t(sz) < 0) {
     // Looks reading directory, not a file.
     if (err) {
-      (*err) += "Looks like filename is a directory.";
+      (*err) += "Looks like filename is a directory.\n";
     }
     return false;
   }
@@ -658,22 +783,53 @@ bool ParseXPDFromFile(const std::string &filename, XPD *xpd, std::string *err) {
     // ???
     if (err) {
       (*err) +=
-          "File size too short. Looks like this file is not a XPD format.";
+          "File size too short. Looks like this file is not a XPD format.\n";
     }
     return false;
   }
 
-  std::vector<uint8_t> data;
-  data.resize(sz);
+  binary->resize(sz);
 
   ifs.seekg(0, ifs.beg);
-  ifs.read(reinterpret_cast<char *>(&data.at(0)),
+  ifs.read(reinterpret_cast<char *>(binary->data()),
            static_cast<std::streamsize>(sz));
 
-  // TODO(syoyo): Consider endianness
-  StreamReader sr(data.data(), data.size(), /* swap endian */ false);
+  bool ret =
+      ParseXPDHeaderFromMemory(binary->data(), binary->size(), xpd_header, err);
 
-  if (!ParseXPDHeader(&sr, xpd, err)) {
+  return ret;
+}
+
+bool ParseXPDHeaderFromMemory(const uint8_t *binary, const size_t binary_length,
+                              XPDHeader *xpd_header, std::string *err) {
+  if (!xpd_header) {
+    if (err) {
+      (*err) = "`xpd_header` argument is null.\n";
+    }
+
+    return false;
+  }
+
+  if (!binary) {
+    if (err) {
+      (*err) = "`binary` argument is null\n";
+    }
+
+    return false;
+  }
+
+  if (binary_length < 16) {
+    if (err) {
+      (*err) = "`binary_length` is too short. It looks its not a XPD data\n";
+    }
+
+    return false;
+  }
+
+  // TODO(syoyo): Consider endianness
+  StreamReader sr(binary, binary_length, /* swap endian */ false);
+
+  if (!ParseXPDHeader(&sr, xpd_header, err)) {
     return false;
   }
 
