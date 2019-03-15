@@ -50,11 +50,22 @@ T.B.W.
 
 ## Generating XPD file from Maya
 
-You can use `xgSplineToXpd` sample plug-in(located in `/usr/autodesk/maya/plug-ins/xgen/plug-ins/` or write your own XPD writer plugin.
+You can use `xgSplineDataToXpd` sample plug-in(located in `/usr/autodesk/maya/plug-ins/xgen/plug-ins/` or write your own XPD writer plugin.
+
+## Note on importing XPD in legacy XGen
+
+It looks legaxy XGen's `From XPD File` expects spline data layout is as defined in `xgSplineDataToXpd` sample code.
+
+### Per CV width
+
+Data layout used in `xgSplineDataToXpd` example does not support exporting per-CV width. It can only support constant width over CVs(strand), and taper. `width ramp` is not support.
+
+If you need a spline curve with varying width, you may need to write your own XGen loader(generator) plugin, or `bake` taper parameter to `width ramp` value and export/import it in other data format(e.g. python + JSON).
 
 ## Supported types
 
-* [x] Curve(grooming splines)
+* [x] Curve(XGen interactive grooming splines)
+* [ ] Point(xuv)
 
 ## License
 
