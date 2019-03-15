@@ -6,14 +6,33 @@ TinyXPD is a simple library to read/write Gen XPD cache file.
 
 * C++11 compiler
 
-## Supported version
+## Supported platform
+
+* [x] macOS
+* [x] Linux
+* [x] Windows(Visual Studio 2017 or later)
+* [x] Android
+* [x] iOS
+* [ ] Big endian machine(e.g. POWER)
+
+## Supported XPD version
 
 * [x] XPD3(~Maya 2018)
 
 ## How to use
 
-`XPDHeader` contains parsed XPD header.
-`XPDHeader` contains the list of data offset from the beginning of a XPD data.
+```
++-----------------------------+   |\
+| XPD header                  |   |
++-----------------------------+   | XPD data
+|                             |   |
+| XPD prim data               |   |
+|                             |   |
+|                             |   |
++-----------------------------+   |/
+```
+
+`XPDHeader` contains header information and the list of data offset from the beginning of a XPD data.
 
 Whole XPD data is provided by the app user(`ParseXPDHeaderFromMemory` API), or read from a file(`ParseXPDFromFile`).
 `ParseXPDFromFile` API is handy but consumes memory.
@@ -45,7 +64,7 @@ if (!ret) {
   std::cerr << "Failed to parse XPD" << std::endl;
 }
 
-T.B.W.
+// See `xpd_reader_example.cc` for how to access primitive data.
 ```
 
 ## Generating XPD file from Maya
@@ -55,6 +74,11 @@ You can use `xgSplineToXpd` sample plug-in(located in `/usr/autodesk/maya/plug-i
 ## Supported types
 
 * [x] Curve(grooming splines)
+
+## TODO
+
+* [ ] Support xuv format.
+
 
 ## License
 
