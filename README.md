@@ -1,23 +1,44 @@
 # TinyXPD, dependency-free and header-only C++11 XGen XPD cache  I/O library.
 
-TinyXPD is a simple library to read/write Gen XPD cache file.
+TinyXPD is a simple library to read/write XGen XPD cache file.
+
+Currently reading XPD data is implemented.
 
 ## Requirement
 
 * C++11 compiler
 
-## Supported version
+## Supported platform
+
+* [x] macOS
+* [x] Linux
+* [x] Windows(Visual Studio 2017 or later)
+* [x] Android
+* [x] iOS
+* [ ] Big endian machine(e.g. POWER)
+
+## Supported XPD version
 
 * [x] XPD3(~Maya 2018)
 
 ## How to use
 
-`XPDHeader` contains parsed XPD header.
-`XPDHeader` contains the list of data offset from the beginning of a XPD data.
+```
++-----------------------------+   |\
+| XPD header                  |   |
++-----------------------------+   | XPD data
+|                             |   |
+| XPD prim data               |   |
+|                             |   |
+|                             |   |
++-----------------------------+   |/
+```
 
-Whole XPD data is provided by the app user(`ParseXPDHeaderFromMemory` API), or read from a file(`ParseXPDFromFile`).
+`XPDHeader` contains header information and the list of data offset from the beginning of a XPD data.
+
+Whole XPD data is supplied by the app user(`ParseXPDHeaderFromMemory` API), or read from a file(`ParseXPDFromFile`).
 `ParseXPDFromFile` API is handy but consumes memory.
-If you want to open large XPD file(e.g. 1GB or more), consider using `ParseXPDHeaderFromMemory` API.
+If you want to open large XPD file(e.g. 1GB or more), consider using `ParseXPDHeaderFromMemory` API(with mmap-ping a XPD data).
 
 ```
 // Do this only in **one** .cc file.
@@ -45,7 +66,7 @@ if (!ret) {
   std::cerr << "Failed to parse XPD" << std::endl;
 }
 
-T.B.W.
+// See `xpd_reader_example.cc` for how to access primitive data.
 ```
 
 ## Generating XPD file from Maya
@@ -54,7 +75,7 @@ You can use `xgSplineDataToXpd` sample plug-in(located in `/usr/autodesk/maya/pl
 
 ## Note on importing XPD in legacy XGen
 
-It looks legaxy XGen's `From XPD File` expects spline data layout is as defined in `xgSplineDataToXpd` sample code.
+It looks legaxy XGen's `From XPD File` feature expects that spline data layout is as defined in `xgSplineDataToXpd` sample code.
 
 ### Per CV width
 
@@ -66,6 +87,12 @@ If you need a spline curve with varying width, you may need to write your own XG
 
 * [x] Curve(XGen interactive grooming splines)
 * [ ] Point(xuv)
+
+## TODO
+
+* [ ] XPD Writer.
+* [ ] Support xuv format.
+
 
 ## License
 
