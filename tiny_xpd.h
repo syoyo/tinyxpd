@@ -62,7 +62,7 @@ struct XPDHeader {
 
   std::vector<int> faceid;
   std::vector<uint32_t> numPrims;
-  std::vector<uint64_t> blockPosition;
+  std::vector<uint64_t> blockPosition; // Absolute from the beginning of XPD data
 
   XPDHeader()
       : fileVersion(0),
@@ -71,6 +71,41 @@ struct XPDHeader {
         time(0.0f),
         numCVs(0),
         coordSpace(Xpd::CoordSpace::World),  // TODO(syoyo): Set invalid value
+        numFaces(0),
+        numBlocks(0) {}
+};
+
+///
+/// Struct for serialization.
+///
+struct XPDHeaderInput {
+
+  unsigned char fileVersion;
+  Xpd::PrimType primType;
+  unsigned char primVersion;
+  float time;
+  uint32_t numCVs;
+  Xpd::CoordSpace coordSpace;
+  uint32_t numFaces;
+
+  uint32_t numBlocks;
+  std::vector<std::string> block;
+  std::vector<uint32_t> primSize;
+
+  std::vector<std::string> key;
+  std::map<std::string, int> keyToId;
+
+  std::vector<int> faceid;
+  std::vector<uint32_t> numPrims;
+  std::vector<uint64_t> blockOffset; // Relative offset.
+
+  XPDHeaderInput()
+      : fileVersion(0),
+        primType(Xpd::PrimType::Point),
+        primVersion(0),
+        time(0.0f),
+        numCVs(0),
+        coordSpace(Xpd::CoordSpace::World),
         numFaces(0),
         numBlocks(0) {}
 };
@@ -110,6 +145,22 @@ bool ParseXPDFromFile(const std::string &filename, XPDHeader *xpd_header,
 bool ParseXPDHeaderFromMemory(const uint8_t *binary, const size_t binary_length,
                               XPDHeader *xpd_header, std::string *err);
 
+///
+/// Serialize XPD data(XPD header + prim data) to a binary.
+///
+/// App user must know how to setup XPD header info and serialize prim data.
+/// (see `examples/simple_writer` example for details)
+///
+/// Aboslute offfset `blockPosition` is calculated inside of this `SerializeToXPD` API,
+/// based on relateive offset `XPDHeaderInput::blockOffset`.
+///
+/// @param[in] input Input XPD header info
+/// @param[in] prim_data Binary stream of prim_data
+/// @param[out] xpd_binary Serialized XPD data.
+/// @param[out] err Error message(filled when failed to serialize)
+///
+bool SerializeToXPD(XPDHeaderInput &input, std::vector<uint8_t> &prim_data, std::vector<uint8_t> *xpd_binary, std::string *err);
+
 }  // namespace tiny_xpd
 
 #if defined(TINY_XPD_IMPLEMENTATION)
@@ -117,6 +168,7 @@ bool ParseXPDHeaderFromMemory(const uint8_t *binary, const size_t binary_length,
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <sstream>
 #include <iostream>  // dbg
 
 namespace tiny_xpd {
@@ -606,8 +658,10 @@ static bool ParseXPDHeader(StreamReader *sr, XPDHeader *xpd, std::string *err) {
         }
       }
     }
+  }
 
-    // primSize
+  // primSize
+  {
     for (size_t i = 0; i < xpd->block.size(); i++) {
       uint32_t primSize;
       if (!sr->read4(&primSize)) {
@@ -622,7 +676,7 @@ static bool ParseXPDHeader(StreamReader *sr, XPDHeader *xpd, std::string *err) {
       if (primSize < 1) {
         // ???
         if (err) {
-          (*err) += "primSize value is zero.";
+          (*err) += "primSize[" + std::to_string(i) + " is zero.";
         }
         return false;
       }
@@ -832,6 +886,158 @@ bool ParseXPDHeaderFromMemory(const uint8_t *binary, const size_t binary_length,
   if (!ParseXPDHeader(&sr, xpd_header, err)) {
     return false;
   }
+
+  return true;
+}
+
+bool SerializeToXPD(XPDHeaderInput &input, std::vector<uint8_t> &prim_data, std::vector<uint8_t> *xpd_binary, std::string *err) {
+
+  if (prim_data.size() < 4) {
+    if (err) {
+      (*err) += "Data size too short for primitive data.\n";
+    }
+    return false;
+  }
+
+  if (!xpd_binary) {
+    if (err) {
+      (*err) += "Pointer to `xpd_binary' is null.\n";
+    }
+    return false;
+  }
+
+  if (input.numFaces == 0) {
+    if (err) {
+      (*err) += "`numFaces' is zero.\n";
+    }
+    return false;
+  }
+
+  if (input.numBlocks == 0) {
+    if (err) {
+      (*err) += "`numBlocks' is zero.\n";
+    }
+    return false;
+  }
+
+  if (input.faceid.size() == 0) {
+    if (err) {
+      (*err) += "Array length of `faceid` is zero.\n";
+    }
+    return false;
+  }
+
+  if (input.numPrims.size() == 0) {
+    if (err) {
+      (*err) += "Array length of `numPrims` is zero.\n";
+    }
+    return false;
+  }
+
+  if (input.blockOffset.size() == 0) {
+    if (err) {
+      (*err) += "Array length of `blockOffset` is zero.\n";
+    }
+    return false;
+  }
+
+  if (input.numFaces != (input.faceid.size())) {
+    if (err) {
+      (*err) += "`numFaces`(" + std::to_string(input.numFaces) + ") must be same with `faceid`.size() which is " + std::to_string(input.faceid.size()) + ".\n";
+    }
+    return false;
+  }
+
+  if ((input.numFaces * input.numBlocks) != (input.blockOffset.size())) {
+    if (err) {
+      (*err) += "`numFaces * numBlocks`(" + std::to_string(input.numFaces * input.numBlocks) + ") must be same with `blockOffset`.size() which is " + std::to_string(input.blockOffset.size()) + ".\n";
+    }
+  }
+
+  std::ostringstream ss;
+
+  // TODO(syoyo): Consider endinanness.
+  {
+    // magic
+    char magic[4] = {'X', 'P', 'D', '3'};
+    ss.write(magic, 4);
+
+    // fileVersion(char)
+    ss.write(reinterpret_cast<const char *>(&input.fileVersion), 1);
+
+    ss.write(reinterpret_cast<const char *>(&input.primType), sizeof(uint32_t));
+    ss.write(reinterpret_cast<const char *>(&input.primVersion), 1);
+    ss.write(reinterpret_cast<const char *>(&input.time), sizeof(float));
+
+    ss.write(reinterpret_cast<const char *>(&input.numCVs), sizeof(uint32_t));
+    ss.write(reinterpret_cast<const char *>(&input.coordSpace), sizeof(uint32_t));
+
+  }
+
+  // block
+  {
+    ss.write(reinterpret_cast<const char *>(&input.numBlocks), sizeof(uint32_t));
+
+    // Build a string with flattened block names(using delimiter '\0')
+    uint32_t block_name_size = 0;
+    std::string block_name_str;
+    for (size_t i = 0; i < input.numBlocks; i++) {
+      block_name_str += input.block[i];
+      block_name_str += '\0';
+
+      block_name_size += input.block[i].size() + 1; // +1 for '\0'
+    }
+
+    ss.write(reinterpret_cast<const char *>(&block_name_size), sizeof(uint32_t));
+
+    std::cout << "blockNames length = " << block_name_size << "\n";
+
+    ss.write(block_name_str.c_str(), block_name_size);
+  }
+
+  // faceid
+  {
+    ss.write(reinterpret_cast<const char *>(input.numFaces), sizeof(uint32_t));
+
+
+    if (input.numFaces > 0) {
+      ss.write(reinterpret_cast<const char *>(input.faceid.data()), input.numFaces * sizeof(uint32_t));
+    }
+
+  }
+
+  // numPrims. length = numFaces
+  {
+    ss.write(reinterpret_cast<const char *>(input.numPrims.data()), input.numFaces * sizeof(uint32_t));
+  }
+
+
+#if 0
+  // Add header size to calcualte absolute block position.
+  for (size_t i = 0; i < input.numBlocks; i++) {
+
+  }
+#endif
+
+  // header size includes `blockPosition` data.
+  size_t header_size = ss.str().size() + input.blockOffset.size() * sizeof(uint64_t);
+
+  std::cout << "header size = " << header_size << std::endl;
+
+  // Compute absolute blockPosition
+  for (size_t b = 0; b < input.blockOffset.size(); b++) {
+    uint64_t position = header_size + input.blockOffset[b];
+    std::cout << "blockPosition[" << b << "] = " << position << "\n";
+    ss.write(reinterpret_cast<const char *>(&position), sizeof(uint64_t));
+  }
+
+  // Append PrimData.
+  ss.write(reinterpret_cast<const char *>(prim_data.data()), std::streamsize(prim_data.size()));
+
+  size_t binary_length = ss.str().size();
+
+  xpd_binary->resize(binary_length);
+  memcpy(xpd_binary->data(), ss.str().c_str(), binary_length);
 
   return true;
 }
