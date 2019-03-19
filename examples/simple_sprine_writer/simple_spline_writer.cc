@@ -37,6 +37,11 @@ static std::vector<uint8_t> GenerateSplinePrimData(const uint32_t num_faces, con
   header->faceid.resize(num_faces, 0);
   header->primSize.resize(num_prims);
 
+
+  for (size_t i = 0; i < header->faceid.size(); i++) {
+    header->faceid[i] = int32_t(i);
+  }
+
   for (size_t i = 0; i < header->primSize.size(); i++) {
     // size = 10 + cvs * 3(xyz)
     // 10 = (id, u, v, length, width, taper, taper start, width vector xyz)
@@ -53,8 +58,9 @@ static std::vector<uint8_t> GenerateSplinePrimData(const uint32_t num_faces, con
 
   size_t offset = 0;
 
-  size_t id = 0;
   for (size_t f = 0; f < header->numFaces; f++) {
+
+    size_t id = 0;
 
     for (size_t b = 0; b < header->numBlocks; b++) {
       header->blockOffset[f * header->numBlocks + b] = offset;
@@ -66,22 +72,25 @@ static std::vector<uint8_t> GenerateSplinePrimData(const uint32_t num_faces, con
         prim_data.push_back(dist(engine)); // u
         prim_data.push_back(dist(engine)); // v
 
+        // Assume underlying plane has extent [-5, 5]^2 and defined in xz axis.
+        float root_xz[2] = {10.0f * dist(engine) - 5.0f, 10.0f * dist(engine) - 5.0f};
+
         // Same data layout as in `xgSplineDataToXpd` sample.
         for (size_t c = 0; c < header->numCVs; c++) {
-          // random point position
-          prim_data.push_back(dist(engine));
-          prim_data.push_back(dist(engine));
-          prim_data.push_back(dist(engine));
+          // Growing up in Y-axis and random jitter
+          prim_data.push_back(root_xz[0] + 0.1f * dist(engine));
+          prim_data.push_back(c * 1.1f);
+          prim_data.push_back(root_xz[1] + 0.1f * dist(engine));
         }
 
         prim_data.push_back(1.0f); // length
-        prim_data.push_back(0.5f + dist(engine)); // widtgh
-        prim_data.push_back(dist(engine)); // taper
-        prim_data.push_back(dist(engine)); // taper start
+        prim_data.push_back(0.1f + dist(engine)); // widtgh
+        prim_data.push_back(1.0f); // taper
+        prim_data.push_back(0.0f);
 
-        prim_data.push_back(dist(engine)); // width vector x
-        prim_data.push_back(dist(engine)); // width vector y
-        prim_data.push_back(dist(engine)); // width vector z
+        prim_data.push_back(1.0f); // width vector x
+        prim_data.push_back(0.0f); // width vector y
+        prim_data.push_back(0.0f); // width vector z
 
         offset += header->primSize[i] * sizeof(float); // = 100 for numCVs=5
       }
