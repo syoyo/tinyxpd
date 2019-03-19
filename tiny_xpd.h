@@ -634,8 +634,6 @@ static bool ParseXPDHeader(StreamReader *sr, XPDHeader *xpd, std::string *err) {
       return false;
     }
 
-    std::cout << "blockSize " << blockSize << "\n";
-
     std::vector<char> blockNames(blockSize);
 
     if (!sr->read(blockSize, blockSize,
@@ -653,7 +651,6 @@ static bool ParseXPDHeader(StreamReader *sr, XPDHeader *xpd, std::string *err) {
         if (blockNames[i] == '\0') {
           std::string name(&blockNames[last_idx], &blockNames[i]);
           xpd->block.push_back(name);
-          std::cout << "name = " << name << std::endl;
           last_idx = i + 1;
         }
       }
@@ -671,8 +668,6 @@ static bool ParseXPDHeader(StreamReader *sr, XPDHeader *xpd, std::string *err) {
         return false;
       }
 
-      std::cout << "primSize = " << primSize << std::endl;
-
       if (primSize < 1) {
         // ???
         if (err) {
@@ -683,7 +678,6 @@ static bool ParseXPDHeader(StreamReader *sr, XPDHeader *xpd, std::string *err) {
 
       xpd->primSize.push_back(primSize);
 
-      std::cout << "primSize[" << i << "] = " << primSize << std::endl;
     }
   }
 
@@ -707,8 +701,6 @@ static bool ParseXPDHeader(StreamReader *sr, XPDHeader *xpd, std::string *err) {
       return false;
     }
 
-    std::cout << "keySize " << keySize << "\n";
-
     // keySize may be 0.
     if (keySize > 0) {
       std::vector<char> keyNames(keySize);
@@ -728,7 +720,6 @@ static bool ParseXPDHeader(StreamReader *sr, XPDHeader *xpd, std::string *err) {
           if (keyNames[i] == '\0') {
             std::string name(&keyNames[last_idx], &keyNames[i]);
             xpd->key.push_back(name);
-            std::cout << "name = " << name << std::endl;
             last_idx = i + 1;
           }
         }
@@ -954,6 +945,13 @@ bool SerializeToXPD(XPDHeaderInput &input, std::vector<uint8_t> &prim_data, std:
     }
   }
 
+  if (input.block.size() != (input.primSize.size())) {
+    if (err) {
+      (*err) += "`block.size()`(" + std::to_string(input.block.size()) + ") must be same with `primSize.size()`(" + std::to_string(input.primSize.size()) + ".\n";
+    }
+    return false;
+  }
+
   std::ostringstream ss;
 
   // TODO(syoyo): Consider endinanness.
@@ -990,14 +988,42 @@ bool SerializeToXPD(XPDHeaderInput &input, std::vector<uint8_t> &prim_data, std:
 
     ss.write(reinterpret_cast<const char *>(&block_name_size), sizeof(uint32_t));
 
-    std::cout << "blockNames length = " << block_name_size << "\n";
-
     ss.write(block_name_str.c_str(), block_name_size);
   }
 
+  // primSize
+  {
+    for (size_t i = 0; i < input.block.size(); i++) {
+      ss.write(reinterpret_cast<const char *>(&input.primSize[i]), sizeof(uint32_t));
+    }
+  }
+
+  // keys
+  {
+    uint32_t numKeys = uint32_t(input.key.size());
+    ss.write(reinterpret_cast<const char *>(&numKeys), sizeof(uint32_t));
+
+    // Build a string with flattened string(using delimiter '\0')
+    uint32_t key_name_size = 0;
+    std::string key_name_str;
+    for (size_t i = 0; i < numKeys; i++) {
+      key_name_str += input.key[i];
+      key_name_str += '\0';
+
+      key_name_size += input.key[i].size() + 1; // +1 for '\0'
+    }
+
+    ss.write(reinterpret_cast<const char *>(&key_name_size), sizeof(uint32_t));
+
+    if (key_name_size > 0) {
+      ss.write(key_name_str.c_str(), key_name_size);
+    }
+  }
+
+
   // faceid
   {
-    ss.write(reinterpret_cast<const char *>(input.numFaces), sizeof(uint32_t));
+    ss.write(reinterpret_cast<const char *>(&input.numFaces), sizeof(uint32_t));
 
 
     if (input.numFaces > 0) {
@@ -1012,22 +1038,12 @@ bool SerializeToXPD(XPDHeaderInput &input, std::vector<uint8_t> &prim_data, std:
   }
 
 
-#if 0
-  // Add header size to calcualte absolute block position.
-  for (size_t i = 0; i < input.numBlocks; i++) {
-
-  }
-#endif
-
   // header size includes `blockPosition` data.
   size_t header_size = ss.str().size() + input.blockOffset.size() * sizeof(uint64_t);
-
-  std::cout << "header size = " << header_size << std::endl;
 
   // Compute absolute blockPosition
   for (size_t b = 0; b < input.blockOffset.size(); b++) {
     uint64_t position = header_size + input.blockOffset[b];
-    std::cout << "blockPosition[" << b << "] = " << position << "\n";
     ss.write(reinterpret_cast<const char *>(&position), sizeof(uint64_t));
   }
 
