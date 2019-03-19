@@ -1,8 +1,10 @@
 # TinyXPD, dependency-free and header-only C++11 XGen XPD cache  I/O library.
 
+![](img/xpd-writer.png)
+
 TinyXPD is a simple library to read/write XGen XPD cache file.
 
-Currently reading XPD data is implemented.
+Currently reading/writing spline XPD data is implemented.
 
 ## Requirement
 
@@ -21,7 +23,7 @@ Currently reading XPD data is implemented.
 
 * [x] XPD3(~Maya 2018)
 
-## How to use
+## Parsing XPD file
 
 ```
 +-----------------------------+   |\
@@ -69,6 +71,10 @@ if (!ret) {
 // See `xpd_reader_example.cc` for how to access primitive data.
 ```
 
+## Examples
+
+* [examples/simple_sprine_writer](examples/simple_sprine_writer) Simple spline XPD writer example.
+
 ## Generating XPD file from Maya
 
 You can use `xgSplineDataToXpd` sample plug-in(located in `/usr/autodesk/maya/plug-ins/xgen/plug-ins/` or write your own XPD writer plugin.
@@ -90,7 +96,6 @@ If you need a spline curve with varying width, you may need to write your own XG
 
 ## TODO
 
-* [ ] XPD Writer.
 * [ ] Support xuv format.
 
 
