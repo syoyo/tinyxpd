@@ -25,6 +25,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
+/*
+
+ Header only XPD loader/saver.
+
+ v0.1.0 : Initial.
+
+*/
+
+
 #include <map>
 #include <string>
 #include <vector>
