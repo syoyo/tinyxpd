@@ -52,21 +52,24 @@ static void GetPrimData(const tiny_xpd::XPDHeader &xpd, const std::vector<uint8_
     return;
   }
 
-  // Flatten primitive values
-  for (size_t p = 0; p < num_prims; p++) {
+  // prim_count = num_prims * sum(xpd.primSize[])
+  size_t prim_count = 0;
+  for (size_t p = 0; p < xpd.primSize.size(); p++) {
 
-    // Pritive value is always float.
-    size_t num_bytes = sizeof(float) * xpd.primSize[p];
-    const size_t src_offset = xpd.blockPosition[face_idx * xpd.numBlocks + block_idx];
-    std::vector<float> buffer;
-    buffer.resize(xpd.primSize[p]);
-    memcpy(buffer.data(), xpd_data.data() + src_offset, num_bytes);
-
-    prims->insert(prims->end(), buffer.begin(), buffer.end());
-
+    prim_count += xpd.primSize[p];
   }
 
+  prim_count *= num_prims;
 
+  // Pritive value is always float.
+  const size_t num_bytes = sizeof(float) * prim_count;
+
+  const size_t src_offset = xpd.blockPosition[face_idx * xpd.numBlocks + block_idx];
+  std::vector<float> buffer;
+  buffer.resize(prim_count);
+  memcpy(buffer.data(), xpd_data.data() + src_offset, num_bytes);
+
+  prims->insert(prims->end(), buffer.begin(), buffer.end());
 
 }
 
