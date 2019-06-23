@@ -85,6 +85,29 @@ static void PrintXPD(const tiny_xpd::XPDHeader &xpd,
   std::cout << "coordSpace : " << PrintCoordSpace(xpd.coordSpace) << "\n";
   std::cout << "numBlocks : " << xpd.numBlocks << "\n";
   std::cout << "numFaces : " << xpd.numFaces << "\n";
+  std::cout << "# of keys : " << xpd.key.size() << "\n";
+  std::cout << "# of keyToIds : " << xpd.keyToId.size() << "\n";
+  std::cout << "# of faceids : " << xpd.faceid.size() << "\n";
+
+  for (size_t i = 0; i < xpd.block.size(); i++) {
+    std::cout << "block[" << i << "] = " << xpd.block[i]
+              << "\n";
+  }
+
+  for (size_t i = 0; i < xpd.key.size(); i++) {
+    std::cout << "key[" << i << "] = " << xpd.key[i]
+              << "\n";
+  }
+
+  for (const auto &it : xpd.keyToId) {
+    std::cout << "keyToId[" << it.first << "] = " << it.second
+              << "\n";
+  }
+
+  for (size_t i = 0; i < xpd.faceid.size(); i++) {
+    std::cout << "faceid[" << i << "] = " << xpd.faceid[i]
+              << "\n";
+  }
 
   // print blockPositon
   for (size_t i = 0; i < xpd.blockPosition.size(); i++) {
